@@ -14,6 +14,7 @@ import numpy as np
 import networkx as nx
 import node2vec
 from gensim.models import Word2Vec
+import multiprocessing
 
 def parse_args():
 	'''
@@ -67,6 +68,7 @@ def read_graph():
 	'''
 	Reads the input network in networkx.
 	'''
+	global G
 	if args.weighted:
 		G = nx.read_edgelist(args.input, nodetype=int, data=(('weight',float),), create_using=nx.DiGraph())
 	else:
@@ -78,6 +80,33 @@ def read_graph():
 		G = G.to_undirected()
 
 	return G
+
+def sub_shortest_paths(i):
+	#j, i = params
+	index = i
+	ins = G.nodes()[index]
+	print type(G.nodes())
+	shortest_paths_all =[]
+	for j in G.nodes()[index:]:
+		try:
+			for p in nx.all_shortest_paths(G, source=ins, target=j):
+				#print p
+				shortest_paths_all = shortest_paths_all + p
+		except:
+			pass
+
+	return shortest_paths_all
+
+
+def shortest_path_walks(G):
+	global path
+	p = multiprocessing.Pool()
+	path = p.map(sub_shortest_paths, range(len(G.nodes())))
+	p.close()
+	p.join()
+	shpaths = filter(None, path)
+	return shpaths	
+
 
 def learn_embeddings(walks):
 	'''
@@ -94,9 +123,10 @@ def main(args):
 	Pipeline for representational learning for all nodes in a graph.
 	'''
 	nx_G = read_graph()
-	G = node2vec.Graph(nx_G, args.directed, args.p, args.q)
-	G.preprocess_transition_probs()
-	walks = G.simulate_walks(args.num_walks, args.walk_length)
+	#G = node2vec.Graph(nx_G, args.directed, args.p, args.q)
+	#G.preprocess_transition_probs()
+	#walks = G.simulate_walks(args.num_walks, args.walk_length)
+	walks = shortest_path_walks(nx_G)
 	learn_embeddings(walks)
 
 if __name__ == "__main__":
